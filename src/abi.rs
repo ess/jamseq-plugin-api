@@ -323,7 +323,9 @@ pub unsafe fn free_c_note_name_list(list: *mut JamSeqNoteNameList) {
 }
 
 /// Internal struct tracking string allocations for `JamSeqPluginList`.
+#[repr(C)]
 struct AllocatedPluginListState {
+    list: JamSeqPluginList,
     _strings: Vec<CString>,
 }
 
@@ -331,14 +333,6 @@ struct AllocatedPluginListState {
 pub fn allocate_c_plugin_list(
     descriptors: &[(String, String, String, JamSeqPluginType)],
 ) -> *mut JamSeqPluginList {
-    if descriptors.is_empty() {
-        let boxed = Box::new(JamSeqPluginList {
-            count: 0,
-            entries: std::ptr::null_mut(),
-        });
-        return Box::into_raw(boxed);
-    }
-
     let mut string_storage = Vec::with_capacity(descriptors.len() * 3);
     let mut entries = Vec::with_capacity(descriptors.len());
 
@@ -363,19 +357,22 @@ pub fn allocate_c_plugin_list(
         });
     }
 
-    let entries_ptr = entries.as_mut_ptr();
     let count = entries.len() as u32;
-    std::mem::forget(entries);
+    let entries_ptr = if entries.is_empty() {
+        std::ptr::null_mut()
+    } else {
+        let ptr = entries.as_mut_ptr();
+        std::mem::forget(entries);
+        ptr
+    };
 
-    let boxed = Box::new((
-        JamSeqPluginList {
+    let boxed = Box::new(AllocatedPluginListState {
+        list: JamSeqPluginList {
             count,
             entries: entries_ptr,
         },
-        AllocatedPluginListState {
-            _strings: string_storage,
-        },
-    ));
+        _strings: string_storage,
+    });
     let raw = Box::into_raw(boxed);
     raw as *mut JamSeqPluginList
 }
@@ -389,30 +386,29 @@ pub unsafe fn free_c_plugin_list(list: *mut JamSeqPluginList) {
         return;
     }
     unsafe {
-        let tuple_ptr = list as *mut (JamSeqPluginList, AllocatedPluginListState);
-        let boxed = Box::from_raw(tuple_ptr);
-        if !boxed.0.entries.is_null() && boxed.0.count > 0 {
+        let full_ptr = list as *mut AllocatedPluginListState;
+        let boxed = Box::from_raw(full_ptr);
+        if !boxed.list.entries.is_null() && boxed.list.count > 0 {
             let _ = Vec::from_raw_parts(
-                boxed.0.entries,
-                boxed.0.count as usize,
-                boxed.0.count as usize,
+                boxed.list.entries,
+                boxed.list.count as usize,
+                boxed.list.count as usize,
             );
         }
     }
+}
+
+/// Internal struct tracking string allocations for `JamSeqParameterList`.
+#[repr(C)]
+struct AllocatedParameterListState {
+    list: JamSeqParameterList,
+    _strings: Vec<CString>,
 }
 
 /// Helper for adapters to allocate a `JamSeqParameterList` with owned C strings.
 pub fn allocate_c_parameter_list(
     params: &[(String, String, String, f32, f32, f32, f32, JamSeqParamType)],
 ) -> *mut JamSeqParameterList {
-    if params.is_empty() {
-        let boxed = Box::new(JamSeqParameterList {
-            count: 0,
-            entries: std::ptr::null_mut(),
-        });
-        return Box::into_raw(boxed);
-    }
-
     let mut string_storage = Vec::with_capacity(params.len() * 3);
     let mut entries = Vec::with_capacity(params.len());
 
@@ -441,17 +437,22 @@ pub fn allocate_c_parameter_list(
         });
     }
 
-    let entries_ptr = entries.as_mut_ptr();
     let count = entries.len() as u32;
-    std::mem::forget(entries);
+    let entries_ptr = if entries.is_empty() {
+        std::ptr::null_mut()
+    } else {
+        let ptr = entries.as_mut_ptr();
+        std::mem::forget(entries);
+        ptr
+    };
 
-    let boxed = Box::new((
-        JamSeqParameterList {
+    let boxed = Box::new(AllocatedParameterListState {
+        list: JamSeqParameterList {
             count,
             entries: entries_ptr,
         },
-        string_storage,
-    ));
+        _strings: string_storage,
+    });
     let raw = Box::into_raw(boxed);
     raw as *mut JamSeqParameterList
 }
@@ -465,13 +466,13 @@ pub unsafe fn free_c_parameter_list(list: *mut JamSeqParameterList) {
         return;
     }
     unsafe {
-        let tuple_ptr = list as *mut (JamSeqParameterList, Vec<CString>);
-        let boxed = Box::from_raw(tuple_ptr);
-        if !boxed.0.entries.is_null() && boxed.0.count > 0 {
+        let full_ptr = list as *mut AllocatedParameterListState;
+        let boxed = Box::from_raw(full_ptr);
+        if !boxed.list.entries.is_null() && boxed.list.count > 0 {
             let _ = Vec::from_raw_parts(
-                boxed.0.entries,
-                boxed.0.count as usize,
-                boxed.0.count as usize,
+                boxed.list.entries,
+                boxed.list.count as usize,
+                boxed.list.count as usize,
             );
         }
     }
